@@ -109,11 +109,123 @@ void transmitDataHTTP() {
     const char* tag = config.getSSID();  // getSSID()로 SSID 가져오기
 
     // 2. HTTP 데이터 문자열 준비
-    char data[4096];  // 전송할 데이터 버퍼
+    char data[2048];  // 전송할 데이터 버퍼
     int length = 0;
 
     // 3. 수집 시간 추가 (UnixTime)
     length += sprintf(data + length, "sig=%lu|", unixTime);
+
+    // 4. MNC 추가 (통신사 코드)
+    length += sprintf(data + length, "%d|", lteData.mnc);
+
+    // 5. LTE 신호 수 추가 (서빙 셀 + 인접 셀 수)
+    length += sprintf(data + length, "%d|", 1 + neighbourCount);
+
+    // 6. LTE Serving Cell 정보 추가 (형식: PCI_BAND_0_CID[rsrp/rsrq])
+    length += sprintf(data + length, "%d_%d_0_%d[%d/%d],", lteData.pci, lteData.band, lteData.cid, lteData.rsrp, lteData.rsrq);
+
+    // 7. LTE Neighbour Cell 정보 추가 (형식: PCI_BAND_2_CID[rsrp/rsrq])
+    if (neighbourCount > 0) {
+        for (int i = 0; i < neighbourCount; i++) {
+            length += sprintf(data + length, "%d_%d_2_%d[%d/%d],",
+                              lteNeighbours[i].pci, lteNeighbours[i].band, lteNeighbours[i].cid, lteNeighbours[i].rsrp, lteNeighbours[i].rsrq);
+        }
+        // 인접 셀 정보가 있었으므로, 마지막에 추가된 쉼표를 제거합니다.
+        length--; 
+    } else {
+        // 인접 셀 정보가 없으므로, 서빙 셀 정보 뒤에 추가된 쉼표를 제거합니다.
+        length--; 
+    }
+
+    // 8. WiFi 신호 수 추가
+    length += sprintf(data + length, "|%d|", wifiCount);
+
+    // 9. WiFi 신호 정보 추가 (형식: MAC[rssi])
+    for (int i = 0; i < wifiCount; i++) {
+        length += sprintf(data + length, "%02x%02x%02x%02x%02x%02x[%d],",
+                          wifiData[i].mac[0], wifiData[i].mac[1], wifiData[i].mac[2],
+                          wifiData[i].mac[3], wifiData[i].mac[4], wifiData[i].mac[5],
+                          wifiData[i].rssi);
+    }
+
+    // 마지막 쉼표 제거
+    if (wifiCount > 0) {
+        length--;  // 쉼표를 덮어씀
+    }
+    data[length] = '\0';    // 널문자 추가
+
+    // HTTP POST 요청할 패킷 만들기
+    char postData[208];
+    sprintf(postData, "tag=%s&%s", tag, data);
+
+    Serial.println(postData);
+    Serial.println(strlen(postData));
+
+
+
+    // 서버 IP와 포트 설정 (DeviceConfig에서 가져옴)
+    const char* serverURL = config.getServerIP();
+
+    // // AT 명령어 구성
+    Serial.println("AT+QHTTPCFG=\"contextid\",1");
+    delay(250);
+
+    Serial2.print("AT+QHTTPURL=");
+    Serial2.print(strlen(serverURL));
+    Serial2.println(",30");  // URL 입력 대기 시간
+    delay(500);
+
+    Serial2.println(serverURL);    // URL 전송
+    delay(500);
+
+    // 패킷 전송 명령어
+    Serial2.print("AT+QHTTPPOST=");
+    Serial2.print(strlen(postData));
+    Serial2.println(",30");  // 데이터 전송 대기 시간
+    delay(500);
+
+    Serial2.println(postData);  // 패킷 데이터 전송
+    delay(500);
+
+    // HTTP 전송 완료 명령어
+    Serial2.println("AT+QHTTPSTOP");
+    delay(250);
+
+
+
+    // 데이터 초기화
+    clearLTEData();
+    clearWiFiData();
+}
+
+// HTTP 연결 및 데이터 수집 확인 함수 + 고도 정보 전송
+void transmitDataHTTPBaro(float altitude) {
+    // RTC에서 UnixTime 가져오기
+    uint32_t unixTime = getTime();  // RTC_manager에서 제공하는 함수
+
+    // LTE 및 WiFi 데이터 가져오기
+    LTEInfo lteData = getLTEData();
+    LTENeighbourCellInfo* lteNeighbours;
+    int neighbourCount = 0;
+    getLTENeighbourCells(&lteNeighbours, &neighbourCount);
+
+    WiFiInfo* wifiData;
+    int wifiCount = 0;
+    getWiFiData(&wifiData, &wifiCount);  // WiFi_manager에서 제공하는 함수
+
+    // 1. DeviceConfig에서 SSID 가져와서 Tag로 사용
+    DeviceConfig& config = DeviceConfig::getInstance();
+    const char* tag = config.getSSID();  // getSSID()로 SSID 가져오기
+
+    // 2. HTTP 데이터 문자열 준비
+    char data[2048];  // 전송할 데이터 버퍼
+    int length = 0;
+
+    // 3. 수집 시간 추가 (UnixTime)
+    length += sprintf(data + length, "sig=%lu|", unixTime);
+
+    // 💡 고도 정보 추가
+    length += sprintf(data + length, "%.2f|", altitude);  // 소수점 둘째자리까지
 
     // 4. MNC 추가 (통신사 코드)
     length += sprintf(data + length, "%d|", lteData.mnc);

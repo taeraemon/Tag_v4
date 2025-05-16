@@ -104,20 +104,23 @@ void loop() {
         // BMP280 센서 값 읽기 및 출력
         Serial.println(F("------------ BMP280 Sensor Data ------------"));
         Serial.print(F("Temperature = "));
-        Serial.print(bmp.readTemperature());
+        float temperature = bmp.readTemperature();
+        Serial.print(temperature);
         Serial.println(F(" *C"));
 
         Serial.print(F("Pressure = "));
-        Serial.print(bmp.readPressure() / 100.0F); // hPa 단위로 변환
+        float pressure = bmp.readPressure() / 100.0F;
+        Serial.print(pressure); // hPa 단위로 변환
         Serial.println(F(" hPa"));
 
         Serial.print(F("Approx. Altitude = "));
-        Serial.print(bmp.readAltitude(1013.25F)); // 표준 해수면 기압 (1013.25 hPa) 기준 고도
+        float altitude = bmp.readAltitude(1013.25F);
+        Serial.print(altitude); // 표준 해수면 기압 (1013.25 hPa) 기준 고도
         Serial.println(F(" m"));
         Serial.println(F("--------------------------------------------"));
 
         // 주기적으로 TCP 연결하여 데이터 전송
-        transmitDataHTTP();  // 데이터를 패킷화하여 서버로 전송
+        transmitDataHTTPBaro(altitude);  // 데이터를 패킷화하여 서버로 전송
     }
 
     if (currentMillis - previousMillis_bat >= 1000) {
