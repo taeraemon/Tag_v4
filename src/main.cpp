@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include "soc/soc.h"          // Brownout detector 비활성화를 위해 추가
+#include "soc/rtc_cntl_reg.h" // Brownout detector 비활성화를 위해 추가
 #include "BLE_manager.h"
 #include "WiFi_manager.h"
 #include "RTC_manager.h"
@@ -8,6 +10,11 @@
 #include "DeviceConfig.h"
 #include "LTE_manager.h"
 #include "Transmission_manager.h"
+#include <Wire.h> // BMP280 I2C 통신을 위해 추가
+#include <Adafruit_BMP280.h> // BMP280 라이브러리 추가
+
+Adafruit_BMP280 bmp; // BMP280 객체 선언 (I2C)
+// #define SEALEVELPRESSURE_HPA (1013.25) // 필요시 주석 해제하여 사용
 
 unsigned long previousMillis_scn = 0;
 unsigned long previousMillis_bat = 0;
@@ -17,8 +24,27 @@ bool isServingcellSent = false;
 bool isNeighbourcellSent = false;
 
 void setup() {
+    // Brownout detector 비활성화 (주의해서 사용할 것!)
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
     Serial.begin(115200);
     Serial2.begin(115200);
+
+    Wire.begin(); // I2C 통신 시작
+    if (!bmp.begin(0x77)) { // BMP280 센서 초기화
+        while (1) {
+            Serial.println(F("Could not find a valid BMP280 sensor, check wiring or I2C ADDR!"));
+            delay(1000);
+        }
+    }
+    Serial.println(F("BMP280 sensor initialized."));
+
+    /* Default settings from datasheet. */
+    bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+                    Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+                    Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+                    Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+                    Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
 
     // EEPROM 초기화
     initEEPROM();
@@ -74,6 +100,21 @@ void loop() {
         isWifiScanSent = false;
         isServingcellSent = false;
         isNeighbourcellSent = false;
+
+        // BMP280 센서 값 읽기 및 출력
+        Serial.println(F("------------ BMP280 Sensor Data ------------"));
+        Serial.print(F("Temperature = "));
+        Serial.print(bmp.readTemperature());
+        Serial.println(F(" *C"));
+
+        Serial.print(F("Pressure = "));
+        Serial.print(bmp.readPressure() / 100.0F); // hPa 단위로 변환
+        Serial.println(F(" hPa"));
+
+        Serial.print(F("Approx. Altitude = "));
+        Serial.print(bmp.readAltitude(1013.25F)); // 표준 해수면 기압 (1013.25 hPa) 기준 고도
+        Serial.println(F(" m"));
+        Serial.println(F("--------------------------------------------"));
 
         // 주기적으로 TCP 연결하여 데이터 전송
         transmitDataHTTP();  // 데이터를 패킷화하여 서버로 전송
