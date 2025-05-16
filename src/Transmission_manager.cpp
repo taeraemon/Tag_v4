@@ -125,14 +125,16 @@ void transmitDataHTTP() {
     length += sprintf(data + length, "%d_%d_0_%d[%d/%d],", lteData.pci, lteData.band, lteData.cid, lteData.rsrp, lteData.rsrq);
 
     // 7. LTE Neighbour Cell 정보 추가 (형식: PCI_BAND_2_CID[rsrp/rsrq])
-    for (int i = 0; i < neighbourCount; i++) {
-        length += sprintf(data + length, "%d_%d_2_%d[%d/%d],",
-                          lteNeighbours[i].pci, lteNeighbours[i].band, lteNeighbours[i].cid, lteNeighbours[i].rsrp, lteNeighbours[i].rsrq);
-    }
-    
-    // 마지막 쉼표 제거
     if (neighbourCount > 0) {
-        length--;  // 쉼표를 덮어씀
+        for (int i = 0; i < neighbourCount; i++) {
+            length += sprintf(data + length, "%d_%d_2_%d[%d/%d],",
+                              lteNeighbours[i].pci, lteNeighbours[i].band, lteNeighbours[i].cid, lteNeighbours[i].rsrp, lteNeighbours[i].rsrq);
+        }
+        // 인접 셀 정보가 있었으므로, 마지막에 추가된 쉼표를 제거합니다.
+        length--; 
+    } else {
+        // 인접 셀 정보가 없으므로, 서빙 셀 정보 뒤에 추가된 쉼표를 제거합니다.
+        length--; 
     }
 
     // 8. WiFi 신호 수 추가
